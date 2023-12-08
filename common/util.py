@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+classes, days = 6, 7
+
 # 成本上限
 cost_stand = 4000
 # 定价上限
@@ -51,43 +53,51 @@ def init_population(individual, population):
         # 随机初始化总进货成本
         individual[0] = np.random.rand() * cost_stand
         # 随机初始化进货成本比例
-        individual[1:7] = list(np.random.dirichlet(np.ones(6)))
+        individual[1:7] = np.random.dirichlet(np.ones(classes))
         # 随机初始化定价
-        individual[7:] = [np.random.rand() * pricing_stand for _ in range(len(individual) - 7)]
+        individual[7:] = [np.random.rand() * pricing_stand for _ in range(len(individual) - classes - 1)]
 
     return population
 
 
 def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     # 品类进货成本, 定价
-    cost, pricings = individual[0] * np.array(individual[1:7]), np.array(individual[7:])
+    cost, pricings = individual[0] * np.array(individual[1:classes + 1]), np.array(individual[classes + 1:])
 
     stock_counts = cost / WholesalePrices  # 进货量
-    rest_counts = stock_counts[:]  # 剩余量
-    sale_counts = np.zeros(6 * 7)  # 销售量
+    rest_counts = np.zeros(classes * days)  # 剩余量
+    rest_counts[:6] = stock_counts[:]
+    sale_counts = np.zeros(classes * days)  # 销售量
 
-    for day in range(7):
+    for day in range(days):
         # 销售量
-        sale_counts[day * 6:(day + 1) * 6] = np.array(
-            [sum([one * math.pow(pricing, i) for i, one in enumerate(coefficient)])
-             for coefficient, pricing in zip(coefficients, pricings[day * 6:(day + 1) * 6])])
+        sale_counts[day * classes:(day + 1) * classes] = np.array(
+            [sum([one * math.pow(pricing, i) for i, one in enumerate(coefficient)]) for coefficient, pricing in
+             zip(coefficients, pricings[day * classes:(day + 1) * classes])])
         # 销售量 = min(销售量, 剩余量)
-        sale_counts[day * 6:(day + 1) * 6] = np.array([max(min(sale, rest), 0)
-                                                       for sale, rest in
-                                                       zip(sale_counts[day * 6:(day + 1) * 6], rest_counts)])
+        sale_counts[day * classes:(day + 1) * classes] = np.array(
+            [max(min(sale, rest), 0) for sale, rest in zip(sale_counts[day * classes:(day + 1) * classes],
+                                                           rest_counts[day * classes:(day + 1) * classes])])
         # 剩余量 = 剩余量 - 卖出量
-        rest_counts -= sale_counts[day * 6:(day + 1) * 6]
+        rest_counts[day * classes:(day + 1) * classes] -= sale_counts[day * classes:(day + 1) * classes]
 
-        loss_counts = AttritionRate * rest_counts
+        loss_counts = AttritionRate * rest_counts[day * classes:(day + 1) * classes]
         # 剩余量 = 剩余量 - 损耗率 * 损耗量
-        rest_counts -= AttritionRate * loss_counts
+        rest_counts[day * classes:(day + 1) * classes] -= AttritionRate * loss_counts
+        if day != (days - 1):
+            rest_counts[(day + 1) * classes:(day + 2) * classes] = rest_counts[day * classes:(day + 1) * classes]
 
     # 销售额 = 销售量 * 定价
     sales = sale_counts * pricings
     # 利润 = 销售量 - 成本
     profit = sum(sales) - sum(cost)
 
-    return profit
+    # 过程记录
+    results = {'profit': profit,
+               'sale_counts': sale_counts,
+               'rest_counts': rest_counts}
+
+    return results
 
 
 def crossover(population, fitness, crossover_rate):
@@ -114,18 +124,21 @@ def mutate(children, mutation_rate):
                 if choice in (0, 1):
                     child[0] = np.random.rand() * cost_stand
                 elif choice in (2, 3):
-                    child[1:7] = list(np.random.dirichlet(np.ones(6)))
+                    child[1:classes + 1] = list(np.random.dirichlet(np.ones(classes)))
                 else:
-                    child[np.random.randint(len(child) - 7) + 7] = np.random.rand() * pricing_stand
+                    child[np.random.randint(len(child) - classes - 1) + classes + 1] = np.random.rand() * pricing_stand
 
     return children
 
 
 def select(population, fitness, top):
     # 捆绑适应度与群体
-    fitness_individual = [(fitness, individual) for fitness, individual in zip(fitness, population)]
+    fitness_population = [{'fitness': fitness, 'individual': individual}
+                          for fitness, individual in zip(fitness, population)]
+
     # 根据适应度对群体排序，选择前top名
-    selected = [one[1] for one in sorted(fitness_individual, key=lambda x: -x[0])[:top]]
+    selected = [one['individual'] for one in
+                sorted(fitness_population, key=lambda one: one['fitness'], reverse=True)[:top]]
 
     return selected
 
