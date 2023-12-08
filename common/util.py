@@ -1,37 +1,118 @@
 import os
 import math
+import random
+
 import yaml
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+stock_stand = 10000
+pricing_stand = 100
+
 
 def load_data():
+    # 获取data中xlsx路径
     xlsx_paths = [Path('data/' + path) for path in os.listdir('data') if Path(path).suffix == '.xlsx']
-    xlsx_to_csv([path for path in xlsx_paths if path.suffix == '.xlsx'])
+    # 将xlsx转化为csv
+    xlsx_to_csv(xlsx_paths)
 
+    # 获取data中csv路径
     csv_paths = [Path('data/' + path) for path in os.listdir('data') if Path(path).suffix == '.csv']
-    datas = read_csv([path for path in csv_paths if path.suffix == '.csv'])
+    # 读取csv
+    datas = read_csv(csv_paths)
 
+    # 损耗率, 定价
     AttritionRate, WholesalePrices = csv_to_numpy(datas)
 
+    # {品类名: 损耗率}
     AttritionRate = {name: rate for _, name, rate in AttritionRate}
+    # {品类名: 定价}
     WholesalePrices = {name: price for _, name, price in WholesalePrices}
 
+    # 品类名
     names = list(AttritionRate.keys())
 
+    # 读取方程系数
     with open(Path('data/coefficients.yaml'), 'r') as f:
         coefficients = yaml.safe_load(f)
 
+    # 品类名, 损耗率, 定价, 系数
     return names, AttritionRate, WholesalePrices, coefficients
 
 
-def calculate_sales(coefficients, pricing):
-    sales = [sum([one * math.pow(pricing, i + 1) for i, one in enumerate(coefficient)])
-             for coefficient, pricing in zip(coefficients, pricing)]
+def init_population(individual, population):
+    # 初始化种群
+    population = [np.zeros(individual) for _ in range(population)]
+    for individual in population:
+        # 随机初始化进货量
+        individual[:len(individual) // 2] = [np.random.rand() * stock_stand for _ in range(len(individual) // 2)]
+        # 随机初始化定价
+        individual[len(individual) // 2:] = [np.random.rand() * pricing_stand for _ in range(len(individual) // 2)]
 
-    return sales
+    return population
+
+
+def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
+    # 进货量, 定价
+    stock_counts, pricings = individual[:len(individual) // 2], individual[len(individual) // 2:]
+
+    # 卖出量
+    sale_counts = np.array([sum([one * math.pow(pricing, i + 1) for i, one in enumerate(coefficient)])
+                            for coefficient, pricing in zip(coefficients, pricings)])
+
+    # 损耗量 = 损耗率 * 进货量
+    loss_counts = AttritionRate * stock_counts
+    # 卖出量 = min(卖出量, 进货量 - 损耗量)
+    sale_counts = np.array([min(sale, stock) for sale, stock in zip(sale_counts, stock_counts - loss_counts)])
+
+    # 成本 = 进货量 * 进价
+    cost = stock_counts * WholesalePrices
+    # 销售量 = 卖出量 * 定价
+    sales = sale_counts * pricings
+
+    # 利润 = 销售量 - 成本
+    profit = sum(sales) - sum(cost)
+
+    return profit
+
+
+def crossover(fitness, population, crossover_rate):
+    # 适应概率
+    probabilities = [one / sum(fitness) for one in fitness]
+    # 根据适应概率选取父本
+    parents = random.choices(population, probabilities, k=int(len(population) * crossover_rate))
+
+    # 确定交叉点
+    cross_point = np.random.randint(1, len(parents[0]))
+    # 交叉互换产生子代
+    children = [np.hstack((parent1[:cross_point], parent2[cross_point:]))
+                for parent1, parent2 in zip(parents[0::2], parents[1::2])]
+
+    return children
+
+
+def mutate(children, mutation_rate):
+    for child in children:
+        # 若随机概率小于变异概率，则变异
+        if np.random.rand() < mutation_rate:
+            # 随机变异点
+            point = np.random.randint(len(child))
+            if point < len(child) // 2:
+                child[point] = np.random.rand() * stock_stand
+            else:
+                child[point] = np.random.rand() * pricing_stand
+
+    return children
+
+
+def copy(population, fitness, top):
+    # 捆绑适应度与群体
+    back = [(fitness, individual) for fitness, individual in zip(fitness, population)]
+
+    # 根据适应度对群体排序，返回前top名
+    return [one[1] for one in sorted(back, key=lambda x: -x[0])[:top]]
 
 
 def xlsx_to_csv(paths):
