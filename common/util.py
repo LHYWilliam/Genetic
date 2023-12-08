@@ -2,16 +2,16 @@ import os
 import math
 import random
 
-import yaml
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# 进货量上限
-stock_stand = 10000
-# 进价上限
-pricing_stand = 50
+# 成本上限
+cost_stand = 4000
+# 定价上限
+pricing_stand = 20
 
 
 def load_data():
@@ -37,8 +37,8 @@ def load_data():
     names = list(AttritionRate.keys())
 
     # 读取方程系数
-    with open(Path('data/coefficients.yaml'), 'r') as f:
-        coefficients = yaml.safe_load(f)
+    with open(Path('data/coefficients.json'), 'r') as f:
+        coefficients = json.load(f)
 
     # 品类名, 损耗率, 定价, 系数
     return names, AttritionRate, WholesalePrices, coefficients
@@ -48,29 +48,41 @@ def init_population(individual, population):
     # 初始化种群
     population = [np.zeros(individual) for _ in range(population)]
     for individual in population:
-        # 随机初始化进货量
-        individual[:len(individual) // 2] = [np.random.rand() * stock_stand for _ in range(len(individual) // 2)]
+        # 随机初始化总进货成本
+        individual[0] = np.random.rand() * cost_stand
+        # 随机初始化进货成本比例
+        individual[1:7] = list(np.random.dirichlet(np.ones(6)))
         # 随机初始化定价
-        individual[len(individual) // 2:] = [np.random.rand() * pricing_stand for _ in range(len(individual) // 2)]
+        individual[7:] = [np.random.rand() * pricing_stand for _ in range(len(individual) - 7)]
 
     return population
 
 
 def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
-    # 进货量, 定价
-    stock_counts, pricings = individual[:len(individual) // 2], individual[len(individual) // 2:]
+    # 品类进货成本, 定价
+    cost, pricings = individual[0] * np.array(individual[1:7]), np.array(individual[7:])
 
-    # 卖出量
-    sale_counts = np.array([sum([one * math.pow(pricing, i) for i, one in enumerate(coefficient)])
-                            for coefficient, pricing in zip(coefficients, pricings)])
-    # 损耗量 = 损耗率 * 进货量
-    loss_counts = AttritionRate * stock_counts
-    # 卖出量 = min(卖出量, 进货量 - 损耗量)
-    sale_counts = np.array([min(sale, stock) for sale, stock in zip(sale_counts, stock_counts - loss_counts)])
+    stock_counts = cost / WholesalePrices  # 进货量
+    rest_counts = stock_counts[:]  # 剩余量
+    sale_counts = np.zeros(6 * 7)  # 销售量
 
-    # 成本 = 进货量 * 进价
-    cost = stock_counts * WholesalePrices
-    # 销售量 = 卖出量 * 定价
+    for day in range(7):
+        # 销售量
+        sale_counts[day * 6:(day + 1) * 6] = np.array(
+            [sum([one * math.pow(pricing, i) for i, one in enumerate(coefficient)])
+             for coefficient, pricing in zip(coefficients, pricings[day * 6:(day + 1) * 6])])
+        # 销售量 = min(销售量, 剩余量)
+        sale_counts[day * 6:(day + 1) * 6] = np.array([max(min(sale, rest), 0)
+                                                       for sale, rest in
+                                                       zip(sale_counts[day * 6:(day + 1) * 6], rest_counts)])
+        # 剩余量 = 剩余量 - 卖出量
+        rest_counts -= sale_counts[day * 6:(day + 1) * 6]
+
+        loss_counts = AttritionRate * rest_counts
+        # 剩余量 = 剩余量 - 损耗率 * 损耗量
+        rest_counts -= AttritionRate * loss_counts
+
+    # 销售额 = 销售量 * 定价
     sales = sale_counts * pricings
     # 利润 = 销售量 - 成本
     profit = sum(sales) - sum(cost)
@@ -85,9 +97,9 @@ def crossover(population, fitness, crossover_rate):
     parents = random.choices(population, probabilities, k=int(len(population) * crossover_rate * 2))
 
     # 确定交叉点
-    cross_point = np.random.randint(1, len(parents[0]))
+    point = np.random.randint(1, len(parents[0]))
     # 交叉互换产生子代
-    children = [np.hstack((parent1[:cross_point], parent2[cross_point:]))
+    children = [np.hstack((parent1[:point], parent2[point:]))
                 for parent1, parent2 in zip(parents[0::2], parents[1::2])]
 
     return children
@@ -95,14 +107,16 @@ def crossover(population, fitness, crossover_rate):
 
 def mutate(children, mutation_rate):
     for child in children:
-        # 若随机概率小于变异概率，则变异
-        if np.random.rand() < mutation_rate:
-            # 随机变异点
-            point = np.random.randint(len(child))
-            if point < len(child) // 2:
-                child[point] = np.random.rand() * stock_stand
-            else:
-                child[point] = np.random.rand() * pricing_stand
+        for _ in range(len(children[0])):
+            # 若随机概率小于变异概率，则变异
+            if np.random.rand() < mutation_rate:
+                choice = np.random.randint(10)
+                if choice in (0, 1):
+                    child[0] = np.random.rand() * cost_stand
+                elif choice in (2, 3):
+                    child[1:7] = list(np.random.dirichlet(np.ones(6)))
+                else:
+                    child[np.random.randint(len(child) - 7) + 7] = np.random.rand() * pricing_stand
 
     return children
 
