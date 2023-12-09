@@ -62,42 +62,45 @@ def init_population(individual, population):
 
 def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     # 品类进货成本, 定价
-    cost, pricings = individual[0] * np.array(individual[1:classes + 1]), np.array(individual[classes + 1:])
+    cost, pricings = (individual[0] * np.array(individual[1:classes + 1]),
+                      np.array(individual[classes + 1:]).reshape(days, classes))
 
-    rest_counts = np.zeros(classes * days)  # 剩余量
-    sale_counts = np.zeros(classes * days)  # 销售量
+    rest_counts = np.zeros((days, classes))  # 剩余量
+    sale_counts = np.zeros((days, classes))  # 销售量
+    loss_counts = np.zeros((days, classes))  # 损耗量
     stock_counts = cost / WholesalePrices  # 进货量
-    rest_counts[:classes] = stock_counts[:]
+    rest_counts[0] = stock_counts
 
     for day in range(days):
         # 销售量
-        sale_counts[day * classes:(day + 1) * classes] = np.array(
+        sale_counts[day] = np.array(
             [sum([one * math.pow(pricing, i) for i, one in enumerate(coefficient)]) for coefficient, pricing in
-             zip(coefficients, pricings[day * classes:(day + 1) * classes])])
+             zip(coefficients, pricings[day])])
         # 销售量 = min(销售量, 剩余量)
-        sale_counts[day * classes:(day + 1) * classes] = np.array(
-            [max(min(sale, rest), 0) for sale, rest in zip(sale_counts[day * classes:(day + 1) * classes],
-                                                           rest_counts[day * classes:(day + 1) * classes])])
+        sale_counts[day] = np.array(
+            [max(min(sale, rest), 0) for sale, rest in zip(sale_counts[day],
+                                                           rest_counts[day])])
         # 剩余量 = 剩余量 - 卖出量
-        rest_counts[day * classes:(day + 1) * classes] -= sale_counts[day * classes:(day + 1) * classes]
+        rest_counts[day] -= sale_counts[day]
         # 损耗量
-        loss_counts = AttritionRate * rest_counts[day * classes:(day + 1) * classes]
+        loss_counts[day] = AttritionRate * rest_counts[day]
         # 剩余量 = 剩余量 - 损耗率 * 损耗量
-        rest_counts[day * classes:(day + 1) * classes] -= loss_counts
+        rest_counts[day] -= loss_counts[day]
         if day != (days - 1):
-            rest_counts[(day + 1) * classes:(day + 2) * classes] = rest_counts[day * classes:(day + 1) * classes]
+            rest_counts[day + 1] = rest_counts[day]
 
     # 销售额 = 销售量 * 定价
     sales = sale_counts * pricings
     # 利润 = 销售量 - 成本
-    profit = sum(sales) - sum(cost)
+    profit = np.sum(sales) - np.sum(cost)
 
     # 过程记录
-    results = {'profit': profit,
+    details = {'profit': profit,
                'sale_counts': sale_counts,
-               'rest_counts': rest_counts}
+               'rest_counts': rest_counts,
+               'loss_counts': loss_counts}
 
-    return results
+    return details
 
 
 def crossover(population, fitness, crossover_rate):
