@@ -11,7 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 5000
+cost_stand = 1000
 # 定价上限
 pricing_stand = 20
 
@@ -41,6 +41,7 @@ def load_data():
     # 读取方程系数
     with open(Path('data/coefficients.json'), 'r') as f:
         coefficients = json.load(f)
+    # pd.DataFrame(coefficients).to_excel('data/coefficients.xlsx')
 
     # 品类名, 损耗率, 定价, 系数
     return names, AttritionRate, WholesalePrices, coefficients
@@ -57,11 +58,14 @@ def init_population(individual, population):
         # 随机初始化定价
         individual[7:] = [np.random.rand() * pricing_stand for _ in range(len(individual) - classes - 1)]
 
+    population = [encode(individual) for individual in population]
+
     return population
 
 
 def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     # 品类进货成本, 定价
+    individual = decode(individual)
     cost, pricings = (individual[0] * np.array(individual[1:classes + 1] / np.sum(individual[1:classes + 1])),
                       np.array(individual[classes + 1:]).reshape(days, classes))
 
@@ -108,27 +112,31 @@ def crossover(population, fitness, crossover_rate):
     probabilities = [one / sum(fitness) for one in fitness]
     # 根据适应概率选取父本
     parents = random.choices(population, probabilities, k=int(len(population) * crossover_rate * 2))
+    parents = [parent.split(' ') for parent in parents]
 
     # 确定交叉点
     point = np.random.randint(1, len(parents[0]) - 1)
     # 交叉互换产生子代
-    children = [np.hstack((parent1[:point], parent2[point:]))
-                for parent1, parent2 in zip(parents[0::2], parents[1::2])]
+    children = [' '.join(parent1[:point] + parent2[point:]) for parent1, parent2 in zip(parents[0::2], parents[1::2])]
 
     return children
 
 
 def mutate(children, mutation_rate):
-    for child in children:
+    for i in range(len(children)):
         # 若随机概率小于变异概率，则变异
         if np.random.rand() < mutation_rate:
+            children[i] = children[i].split(' ')
             choice = np.random.rand()
             if choice < 0.2:
-                child[0] = np.random.rand() * cost_stand
+                children[i][0] = encode([np.random.rand() * cost_stand])
             elif choice < 0.4:
-                child[np.random.randint(1, classes + 1)] = np.random.rand()
+                children[i][np.random.randint(1, classes + 1)] = encode([np.random.rand()])
             else:
-                child[np.random.randint(len(child) - classes - 1) + classes + 1] = np.random.rand() * pricing_stand
+                children[i][np.random.randint(len(children[i]) - classes - 1) + classes + 1] \
+                    = encode([np.random.rand() * pricing_stand])
+
+            children[i] = ' '.join(children[i])
 
     return children
 
@@ -143,6 +151,18 @@ def select(population, fitness, top):
                 sorted(fitness_population, key=lambda one: one['fitness'], reverse=True)[:top]]
 
     return selected
+
+
+def encode(individual):
+    binary = ' '.join([format(np.float64(one).view(np.int64), f'0{64}b') for one in individual])
+
+    return binary
+
+
+def decode(binary):
+    individual = np.array([np.int64(int(one, 2)).view(np.float64) for one in binary.split(' ')])
+
+    return individual
 
 
 def xlsx_to_csv(paths):
