@@ -11,7 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 4000
+cost_stand = 5000
 # 定价上限
 pricing_stand = 20
 
@@ -53,7 +53,7 @@ def init_population(individual, population):
         # 随机初始化总进货成本
         individual[0] = np.random.rand() * cost_stand
         # 随机初始化进货成本比例
-        individual[1:7] = np.random.dirichlet(np.ones(classes))
+        individual[1:7] = [np.random.rand() for _ in range(classes)]
         # 随机初始化定价
         individual[7:] = [np.random.rand() * pricing_stand for _ in range(len(individual) - classes - 1)]
 
@@ -62,7 +62,7 @@ def init_population(individual, population):
 
 def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     # 品类进货成本, 定价
-    cost, pricings = (individual[0] * np.array(individual[1:classes + 1]),
+    cost, pricings = (individual[0] * np.array(individual[1:classes + 1] / np.sum(individual[1:classes + 1])),
                       np.array(individual[classes + 1:]).reshape(days, classes))
 
     rest_counts = np.zeros((days, classes))  # 剩余量
@@ -110,7 +110,7 @@ def crossover(population, fitness, crossover_rate):
     parents = random.choices(population, probabilities, k=int(len(population) * crossover_rate * 2))
 
     # 确定交叉点
-    point = np.random.randint(1, len(parents[0]))
+    point = np.random.randint(1, len(parents[0]) - 1)
     # 交叉互换产生子代
     children = [np.hstack((parent1[:point], parent2[point:]))
                 for parent1, parent2 in zip(parents[0::2], parents[1::2])]
@@ -120,16 +120,15 @@ def crossover(population, fitness, crossover_rate):
 
 def mutate(children, mutation_rate):
     for child in children:
-        for _ in range(len(children[0])):
-            # 若随机概率小于变异概率，则变异
-            if np.random.rand() < mutation_rate:
-                choice = np.random.randint(10)
-                if choice in (0, 1):
-                    child[0] = np.random.rand() * cost_stand
-                elif choice in (2, 3):
-                    child[1:classes + 1] = list(np.random.dirichlet(np.ones(classes)))
-                else:
-                    child[np.random.randint(len(child) - classes - 1) + classes + 1] = np.random.rand() * pricing_stand
+        # 若随机概率小于变异概率，则变异
+        if np.random.rand() < mutation_rate:
+            choice = np.random.rand()
+            if choice < 0.2:
+                child[0] = np.random.rand() * cost_stand
+            elif choice < 0.4:
+                child[np.random.randint(1, classes + 1)] = np.random.rand()
+            else:
+                child[np.random.randint(len(child) - classes - 1) + classes + 1] = np.random.rand() * pricing_stand
 
     return children
 
