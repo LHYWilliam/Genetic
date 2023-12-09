@@ -64,10 +64,10 @@ def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     # 品类进货成本, 定价
     cost, pricings = individual[0] * np.array(individual[1:classes + 1]), np.array(individual[classes + 1:])
 
-    stock_counts = cost / WholesalePrices  # 进货量
     rest_counts = np.zeros(classes * days)  # 剩余量
-    rest_counts[:6] = stock_counts[:]
     sale_counts = np.zeros(classes * days)  # 销售量
+    stock_counts = cost / WholesalePrices  # 进货量
+    rest_counts[:classes] = stock_counts[:]
 
     for day in range(days):
         # 销售量
@@ -80,10 +80,10 @@ def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
                                                            rest_counts[day * classes:(day + 1) * classes])])
         # 剩余量 = 剩余量 - 卖出量
         rest_counts[day * classes:(day + 1) * classes] -= sale_counts[day * classes:(day + 1) * classes]
-
+        # 损耗量
         loss_counts = AttritionRate * rest_counts[day * classes:(day + 1) * classes]
         # 剩余量 = 剩余量 - 损耗率 * 损耗量
-        rest_counts[day * classes:(day + 1) * classes] -= AttritionRate * loss_counts
+        rest_counts[day * classes:(day + 1) * classes] -= loss_counts
         if day != (days - 1):
             rest_counts[(day + 1) * classes:(day + 2) * classes] = rest_counts[day * classes:(day + 1) * classes]
 
