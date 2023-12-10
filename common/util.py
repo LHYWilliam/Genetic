@@ -11,7 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 1000
+cost_stand = 2000
 # 定价上限
 pricing_stand = 20
 
@@ -68,7 +68,7 @@ def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     individual = decode(individual)
     # 成本 定价
     cost, pricings = (individual[0] * np.array(individual[1:classes + 1] / np.sum(individual[1:classes + 1])),
-                      np.array(individual[classes + 1:]).reshape(days, classes))
+                      np.array(individual[classes + 1:]).reshape(days, classes) + WholesalePrices)
 
     sale_counts = np.zeros((days, classes))  # 销售量
     rest_counts = np.zeros((days, classes))  # 剩余量
