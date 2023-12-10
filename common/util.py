@@ -11,9 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 2000
-# 定价上限
-pricing_stand = 20
+cost_stand = 3000
 
 
 def load_data():
@@ -46,16 +44,17 @@ def load_data():
     return names, AttritionRate, WholesalePrices, coefficients
 
 
-def init_population(individual, population):
+def init_population(individual, population, WholesalePrices):
     # 初始化种群
     population = [np.zeros(individual) for _ in range(population)]
     for individual in population:
         # 随机初始化 总进货成本
         individual[0] = np.random.rand() * cost_stand
         # 随机初始化 进货成本相对比例    绝对比例 = 相对比例 / sum(相对比列s)
-        individual[1:7] = [np.random.rand() for _ in range(classes)]
+        individual[1:classes + 1] = np.random.rand(classes)
         # 随机初始化 定价
-        individual[7:] = [np.random.rand() * pricing_stand for _ in range(days * classes)]
+        individual[classes + 1:] = (np.random.rand(days, classes) * WholesalePrices
+                                    + WholesalePrices).reshape(days * classes)
 
     # 编码
     population = [encode(individual) for individual in population]
@@ -68,7 +67,7 @@ def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     individual = decode(individual)
     # 成本 定价
     cost, pricings = (individual[0] * np.array(individual[1:classes + 1] / np.sum(individual[1:classes + 1])),
-                      np.array(individual[classes + 1:]).reshape(days, classes) + WholesalePrices)
+                      individual[classes + 1:].reshape(days, classes))
 
     sale_counts = np.zeros((days, classes))  # 销售量
     rest_counts = np.zeros((days, classes))  # 剩余量
@@ -123,19 +122,23 @@ def crossover(population, fitness, crossover_rate):
     return children
 
 
-def mutate(children, mutation_rate):
+def mutate(children, mutation_rate, WholesalePrices):
     for i in range(len(children)):
         # 若随机概率小于变异概率，则变异
         if np.random.rand() < mutation_rate:
             children[i] = children[i].split(' ')
             choice = np.random.rand()
             if choice < 0.2:  # 变异 总成本
-                children[i][0] = encode([np.random.rand() * cost_stand])
+                point = 0
+                children[i][point] = encode([np.random.rand() * cost_stand])
             elif choice < 0.4:  # 变异 成本相对比例
-                children[i][np.random.randint(1, classes + 1)] = encode([np.random.rand()])
+                point = np.random.randint(1, classes + 1)
+                children[i][point] = encode([np.random.rand()])
             else:  # 变异 定价
-                children[i][np.random.randint(len(children[i]) - classes - 1) + classes + 1] \
-                    = encode([np.random.rand() * pricing_stand])
+                point = np.random.randint(len(children[i]) - classes - 1) + classes + 1
+                children[i][point] \
+                    = encode([np.random.rand() * WholesalePrices[(point - classes - 1) % classes]
+                              + WholesalePrices[(point - classes - 1) % classes]])
             children[i] = ' '.join(children[i])
 
     return children

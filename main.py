@@ -29,13 +29,14 @@ if __name__ == '__main__':
     coefficients = [np.array(coefficient) for coefficient in coefficients.values()]
 
     population_size = 10000  # 种群大小
-    generations = 100  # 迭代代数
+    generations = 1000  # 迭代代数
     crossover_rate = (population_size - population_size // 10) / population_size  # 重组概率
     mutation_rate = 0.5  # 变异概率
 
     # # 初始化种群
     # log = {}  # 数据记录
-    # population = init_population(individual=(1 + classes + classes * days), population=population_size)
+    # population = init_population(individual=(1 + classes + classes * days), population=population_size,
+    #                              WholesalePrices=WholesalePrices)
 
     # 载入种群
     with open('result/log.json', 'r') as f:
@@ -45,7 +46,9 @@ if __name__ == '__main__':
     population = [best[:] for _ in range(population_size)]
 
     # 迭代开始
+    already = len(log)
     for generation in range(generations):
+        generation = generation + already
         # 计算适应度(利润)
         details = [fitness_function(coefficients, individual, AttritionRate, WholesalePrices)
                    for individual in population]
@@ -59,7 +62,7 @@ if __name__ == '__main__':
                             'loss_count': loss_count} for individual, profit, sale_count, rest_count, loss_count
                    in zip(population, profits, sale_counts, rest_counts, loss_counts)}
 
-        print(f'\rgeneration {generation}: {max(details.keys())}', end='')
+        print(f'\rgeneration {generation + 1}: {max(details.keys())}', end='')
 
         best = details[max(details.keys())]
         individual, sale_count, rest_count, loss_count = \
@@ -77,11 +80,11 @@ if __name__ == '__main__':
 
         # 保存数据
         with open('result/best.json', 'w') as f:
-            json.dump(list(decode(best['individual'])), f)
+            json.dump(list(decode(best['individual'])), f, indent=2)
         with open('result/best.binary', 'w') as f:
             f.write(best['individual'])
         with open('result/log.json', 'w') as f:
-            json.dump(log, f)
+            json.dump(log, f, indent=2)
         pd.DataFrame(result).to_excel('result/result.xlsx')
         pd.DataFrame(sale_count).to_excel('result/sale_count.xlsx')
         pd.DataFrame(rest_count).to_excel('result/rest_count.xlsx')
@@ -90,7 +93,7 @@ if __name__ == '__main__':
         # 重组
         children = crossover(population, profits, crossover_rate)
         # 变异
-        children = mutate(children, mutation_rate)
+        children = mutate(children, mutation_rate, WholesalePrices)
         # 复制
         parents = select(population, profits, top=population_size - len(children))
 
