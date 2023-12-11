@@ -29,21 +29,21 @@ if __name__ == '__main__':
     coefficients = [np.array(coefficient) for coefficient in coefficients.values()]
 
     population_size = 10000  # 种群大小
-    generations = 1000  # 迭代代数
+    generations = 128  # 迭代代数
     crossover_rate = (population_size - population_size // 10) / population_size  # 重组概率
     mutation_rate = 0.5  # 变异概率
 
-    # # 初始化种群
-    # log = {}  # 数据记录
-    # population = init_population(individual=(1 + classes + classes * days), population=population_size,
-    #                              WholesalePrices=WholesalePrices)
+    # 初始化种群
+    log = {}  # 数据记录
+    population = init_population(individual=(1 + classes + classes * days), population=population_size,
+                                 WholesalePrices=WholesalePrices)
 
-    # 载入种群
-    with open('result/log.json', 'r') as f:
-        log = json.load(f)
-    with open('result/best.json', 'r') as f:
-        best = encode(json.load(f))
-    population = [best[:] for _ in range(population_size)]
+    # # 载入种群
+    # with open('result/log.json', 'r') as f:
+    #     log = json.load(f)
+    # with open('result/best.json', 'r') as f:
+    #     best = encode(json.load(f))
+    # population = [best[:] for _ in range(population_size)]
 
     # 迭代开始
     already = len(log)
@@ -61,22 +61,28 @@ if __name__ == '__main__':
         details = {profit: {'individual': individual, 'sale_count': sale_count, 'rest_count': rest_count,
                             'loss_count': loss_count} for individual, profit, sale_count, rest_count, loss_count
                    in zip(population, profits, sale_counts, rest_counts, loss_counts)}
+        fitness = details.keys()
 
         print(f'\rgeneration {generation + 1}: {max(details.keys())}', end='')
 
-        best = details[max(details.keys())]
+        best = details[max(fitness)]
         individual, sale_count, rest_count, loss_count = \
             decode(best['individual']), best['sale_count'], best['rest_count'], best['loss_count']
         cost, proportion, pricing = (np.array(individual[0]), np.array(individual[1:1 + classes]),
                                      np.array(individual[1 + classes:]).reshape(days, classes))
 
         # 组织数据
+        # 历史数据
+        log[f'generation {generation + 1}'] = {'fitness': max(fitness), 'individual': list(individual)}
+        fitness = {'generation': [generation + 1 for generation in range(generation + 1)],
+                   'fitness': [one['fitness'] for one in log.values()]}
+
+        # 本次数据
         result = dict({'成本': cost, '比例': proportion},
                       **{f'第{i + 1}天定价': pricing for i, pricing in enumerate(pricing)})
         sale_count = {f'第{i + 1}天销售量': sale_count for i, sale_count in enumerate(sale_count)}
         rest_count = {f'第{i + 1}天剩余量': rest_count for i, rest_count in enumerate(rest_count)}
         loss_count = {f'第{i + 1}天损耗量': loss_count for i, loss_count in enumerate(loss_count)}
-        log[f'generation {generation + 1}'] = {'fitness': max(details.keys()), 'individual': list(individual)}
 
         # 保存数据
         with open('result/best.json', 'w') as f:
@@ -89,6 +95,7 @@ if __name__ == '__main__':
         pd.DataFrame(sale_count).to_excel('result/sale_count.xlsx')
         pd.DataFrame(rest_count).to_excel('result/rest_count.xlsx')
         pd.DataFrame(loss_count).to_excel('result/loss_count.xlsx')
+        pd.DataFrame(fitness).to_excel('result/fitness.xlsx')
 
         # 重组
         children = crossover(population, profits, crossover_rate)
