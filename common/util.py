@@ -11,7 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 3000
+cost_stand = 2000
 
 
 def load_data():
@@ -53,8 +53,7 @@ def init_population(individual, population, WholesalePrices):
         # 随机初始化 进货成本相对比例    绝对比例 = 相对比例 / sum(相对比列s)
         individual[1:classes + 1] = np.random.rand(classes)
         # 随机初始化 定价
-        individual[classes + 1:] = (np.random.rand(days, classes) * WholesalePrices
-                                    + WholesalePrices).reshape(days * classes)
+        individual[classes + 1:] = ((1 + np.random.rand(days, classes)) * WholesalePrices).reshape(days * classes)
 
     # 编码
     population = [encode(individual) for individual in population]
@@ -99,7 +98,8 @@ def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
     profit = np.sum(sales) - np.sum(cost)
 
     # 过程记录
-    details = {'profit': profit,
+    details = {'individual': individual,
+               'profit': profit,
                'sale_counts': sale_counts,
                'rest_counts': rest_counts,
                'loss_counts': loss_counts}
@@ -137,8 +137,7 @@ def mutate(children, mutation_rate, WholesalePrices):
             else:  # 变异 定价
                 point = np.random.randint(len(children[i]) - classes - 1) + classes + 1
                 children[i][point] \
-                    = encode([np.random.rand() * WholesalePrices[(point - classes - 1) % classes]
-                              + WholesalePrices[(point - classes - 1) % classes]])
+                    = encode([(1 + np.random.rand()) * WholesalePrices[(point - classes - 1) % classes]])
             children[i] = ' '.join(children[i])
 
     return children
@@ -146,12 +145,12 @@ def mutate(children, mutation_rate, WholesalePrices):
 
 def select(population, fitness, top):
     # 捆绑适应度与群体
-    fitness_population = [{'fitness': fitness, 'individual': individual}
+    fitness_individual = [{'fitness': fitness, 'individual': individual}
                           for fitness, individual in zip(fitness, population)]
 
     # 根据适应度对群体排序，选择前top名
     selected = [one['individual'] for one in
-                sorted(fitness_population, key=lambda one: one['fitness'], reverse=True)[:top]]
+                sorted(fitness_individual, key=lambda one: one['fitness'], reverse=True)[:top]]
 
     return selected
 
