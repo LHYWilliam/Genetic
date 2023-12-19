@@ -4,7 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 
-from common.util import (load_data, init_population, fitness_function, crossover, mutate, select)
+from common.util import (load_data, init_population, fitness_function, crossover, mutate, select, encode)
 
 classes, days = 6, 7
 
@@ -28,8 +28,8 @@ if __name__ == '__main__':
     WholesalePrices = np.array(list(WholesalePrices.values()))
     coefficients = [np.array(coefficient) for coefficient in coefficients.values()]
 
-    population_size = 10000  # 种群大小
-    generations = 1024  # 迭代代数
+    population_size = 10240  # 种群大小
+    generations = 256  # 迭代代数
     crossover_rate = (population_size - population_size // 10) / population_size  # 重组概率
     mutation_rate = 0.5  # 变异概率
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
         print(f'\rgeneration {generation + 1}: {best["profit"]}', end='')
 
-        individual, sale_count, rest_count, loss_count = \
+        individual, sale_counts, rest_counts, loss_counts = \
             best['individual'], best['sale_counts'], best['rest_counts'], best['loss_counts']
         cost, proportion, pricing = (np.array(individual[0]), np.array(individual[1:1 + classes]),
                                      np.array(individual[1 + classes:]).reshape(days, classes))
@@ -72,9 +72,9 @@ if __name__ == '__main__':
         # 本次数据
         result = dict({'成本': cost, '比例': proportion},
                       **{f'第{day + 1}天定价': pricing for day, pricing in enumerate(pricing)})
-        sale_count = {f'第{day + 1}天销售量': sale_count for day, sale_count in enumerate(sale_count)}
-        rest_count = {f'第{day + 1}天剩余量': rest_count for day, rest_count in enumerate(rest_count)}
-        loss_count = {f'第{day + 1}天损耗量': loss_count for day, loss_count in enumerate(loss_count)}
+        sale_counts = {f'第{day + 1}天销售量': sale_count for day, sale_count in enumerate(sale_counts)}
+        rest_counts = {f'第{day + 1}天剩余量': rest_count for day, rest_count in enumerate(rest_counts)}
+        loss_counts = {f'第{day + 1}天损耗量': loss_count for day, loss_count in enumerate(loss_counts)}
 
         # 保存数据
         with open('result/best.json', 'w') as f:
@@ -83,9 +83,9 @@ if __name__ == '__main__':
             json.dump(log, f, indent=2)
 
         pd.DataFrame(result).to_excel('result/result.xlsx')
-        pd.DataFrame(sale_count).to_excel('result/sale_count.xlsx')
-        pd.DataFrame(rest_count).to_excel('result/rest_count.xlsx')
-        pd.DataFrame(loss_count).to_excel('result/loss_count.xlsx')
+        pd.DataFrame(sale_counts).to_excel('result/sale_count.xlsx')
+        pd.DataFrame(rest_counts).to_excel('result/rest_count.xlsx')
+        pd.DataFrame(loss_counts).to_excel('result/loss_count.xlsx')
         pd.DataFrame(profits).to_excel('result/log.xlsx')
 
         # 重组

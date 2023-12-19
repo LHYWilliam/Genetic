@@ -11,7 +11,7 @@ import pandas as pd
 classes, days = 6, 7
 
 # 成本上限
-cost_stand = 2000
+cost_stand = 3000
 
 
 def load_data():
