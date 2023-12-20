@@ -49,7 +49,7 @@ if __name__ == '__main__':
     for generation in range(generations):
         generation = generation + already
         # 计算适应度(利润)
-        details = [fitness_function(coefficients, individual, AttritionRate, WholesalePrices)
+        details = [fitness_function(individual, coefficients, AttritionRate, WholesalePrices)
                    for individual in population]
 
         # 处理数据

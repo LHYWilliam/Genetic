@@ -61,7 +61,7 @@ def init_population(individual, population, WholesalePrices):
     return population
 
 
-def fitness_function(coefficients, individual, AttritionRate, WholesalePrices):
+def fitness_function(individual, coefficients, AttritionRate, WholesalePrices):
     # 解码
     individual = decode(individual)
     # 成本 定价
@@ -135,9 +135,8 @@ def mutate(children, mutation_rate, WholesalePrices):
                 point = np.random.randint(1, classes + 1)
                 children[i][point] = encode([np.random.rand()])
             else:  # 变异 定价
-                point = np.random.randint(len(children[i]) - classes - 1) + classes + 1
-                children[i][point] \
-                    = encode([(1 + np.random.rand()) * WholesalePrices[(point - classes - 1) % classes]])
+                point = np.random.randint(classes + 1, len(children[i]))
+                children[i][point] = encode([(1 + np.random.rand()) * WholesalePrices[(point - classes - 1) % classes]])
             children[i] = ' '.join(children[i])
 
     return children
