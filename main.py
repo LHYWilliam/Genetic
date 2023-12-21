@@ -88,6 +88,9 @@ if __name__ == '__main__':
         pd.DataFrame(loss_counts).to_excel('result/loss_count.xlsx')
         pd.DataFrame(profits).to_excel('result/log.xlsx')
 
+        if generation >= 1 and len(set(profits['fitness'][-16:])) == 1:
+            break
+
         # 重组
         children = crossover(population, fitness, crossover_rate)
         # 变异
