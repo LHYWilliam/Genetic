@@ -156,14 +156,14 @@ def select(population, fitness, top):
 
 def encode(individual):
     # 编码
-    binary = ' '.join([format(np.float64(one).view(np.int64), f'0{64}b') for one in individual])
+    binary = ' '.join([f"{bin(int(one))}" for one in np.round(individual, 1) * 10])
 
     return binary
 
 
 def decode(binary):
     # 解码
-    individual = np.array([np.int64(int(one, 2)).view(np.float64) for one in binary.split(' ')])
+    individual = np.array([eval(one) / 10 for one in binary.split(' ')])
 
     return individual
 
